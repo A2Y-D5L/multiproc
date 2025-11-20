@@ -35,35 +35,25 @@ import (
 func DefaultCommandFactory(ctx context.Context, spec ProcessSpec) (Command, error) {
 	return &execCommand{
 		spec: spec,
-		ctx:  ctx,
+		cmd:  newExecCmdWrapper(ctx, spec.Command, spec.Args...),
 	}, nil
 }
 
 // execCommand wraps exec.Cmd to implement the Command interface.
 type execCommand struct {
-	ctx  context.Context
 	cmd  *execCmdWrapper
 	spec ProcessSpec
 }
 
 func (e *execCommand) StdoutPipe() (io.ReadCloser, error) {
-	if e.cmd == nil {
-		e.cmd = newExecCmdWrapper(e.spec.Command, e.spec.Args...)
-	}
 	return e.cmd.StdoutPipe()
 }
 
 func (e *execCommand) StderrPipe() (io.ReadCloser, error) {
-	if e.cmd == nil {
-		e.cmd = newExecCmdWrapper(e.spec.Command, e.spec.Args...)
-	}
 	return e.cmd.StderrPipe()
 }
 
 func (e *execCommand) Start() error {
-	if e.cmd == nil {
-		e.cmd = newExecCmdWrapper(e.spec.Command, e.spec.Args...)
-	}
 	return e.cmd.Start()
 }
 
@@ -86,10 +76,10 @@ type execCmdWrapper struct {
 	*exec.Cmd
 }
 
-// newExecCmdWrapper creates a new wrapped exec.Cmd.
-func newExecCmdWrapper(name string, args ...string) *execCmdWrapper {
+// newExecCmdWrapper creates a new wrapped exec.Cmd with context.
+func newExecCmdWrapper(ctx context.Context, name string, args ...string) *execCmdWrapper {
 	return &execCmdWrapper{
-		Cmd: exec.Command(name, args...), //nolint:noctx // Context not available.
+		Cmd: exec.CommandContext(ctx, name, args...),
 	}
 }
 
@@ -118,11 +108,11 @@ type processWrapper struct {
 
 // Signal sends a signal to the process.
 func (p *processWrapper) Signal(sig syscall.Signal) error {
-	// On Unix-like systems, we can use syscall.Kill
-	return syscall.Kill(p.Pid, sig)
+	// Use os.Process.Signal for cross-platform compatibility
+	return p.Process.Signal(sig)
 }
 
 // Kill terminates the process.
 func (p *processWrapper) Kill() error {
-	return syscall.Kill(p.Pid, syscall.SIGKILL)
+	return p.Process.Kill()
 }
